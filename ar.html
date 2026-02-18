@@ -1,0 +1,40 @@
+<!doctype html>
+<html>
+<head>
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Nevermore AR</title>
+  <script src="https://aframe.io/releases/1.4.2/aframe.min.js"></script>
+  <style>
+    body { margin:0; }
+    #back {
+      position: fixed;
+      top: 15px;
+      left: 15px;
+      z-index: 10;
+      padding: 8px 12px;
+      background: rgba(0,0,0,.6);
+      color: white;
+      border-radius: 8px;
+      text-decoration: none;
+      font-size: 14px;
+    }
+  </style>
+</head>
+
+<body>
+
+  <a href="index.html" id="back">Back</a>
+
+  <a-scene webxr="optionalFeatures: hit-test" vr-mode-ui="enabled:false">
+    <a-entity camera look-controls position="0 1.6 0"></a-entity>
+
+    <a-text 
+      value="Beware the full moon at Nevermore..."
+      position="0 1 -2"
+      color="purple"
+      align="center">
+    </a-text>
+  </a-scene>
+
+</body>
+</html>
