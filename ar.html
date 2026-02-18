@@ -4,8 +4,9 @@
   <meta name="viewport" content="width=device-width,initial-scale=1" />
   <title>Nevermore AR</title>
   <script src="https://aframe.io/releases/1.4.2/aframe.min.js"></script>
+
   <style>
-    body { margin:0; }
+    body { margin: 0; }
     #back {
       position: fixed;
       top: 15px;
@@ -17,24 +18,92 @@
       border-radius: 8px;
       text-decoration: none;
       font-size: 14px;
+      font-family: sans-serif;
     }
   </style>
+
+  <script>
+    // Component: laat een entity rond de camera bewegen (grote cirkel/ellips)
+    AFRAME.registerComponent('orbit-around-camera', {
+      schema: {
+        radius: { type: 'number', default: 35 },   // hoe ver weg (meters)
+        height: { type: 'number', default: 12 },   // hoogte (meters)
+        speed:  { type: 'number', default: 0.04 }, // snelheid (radians per seconde-ish)
+        ellipse:{ type: 'number', default: 1.4 }   // 1 = cirkel, >1 = ellips (meer “zoekwerk”)
+      },
+      init: function () {
+        this.cam = document.querySelector('#cam');
+        this.angle = Math.random() * Math.PI * 2; // start op random plek
+      },
+      tick: function (time, dt) {
+        if (!this.cam) return;
+
+        const d = this.data;
+        const delta = dt / 1000;
+
+        // Update hoek
+        this.angle += d.speed * delta;
+
+        // Camera positie
+        const camPos = this.cam.object3D.position;
+
+        // Ellips: x en z verschillende radius
+        const x = camPos.x + Math.cos(this.angle) * d.radius * d.ellipse;
+        const z = camPos.z + Math.sin(this.angle) * d.radius;
+        const y = d.height;
+
+        this.el.object3D.position.set(x, y, z);
+
+        // Laat de maan altijd richting camera draaien (zodat je 'm als je 'm vindt, goed ziet)
+        this.el.object3D.lookAt(camPos);
+      }
+    });
+  </script>
 </head>
 
 <body>
-
   <a href="index.html" id="back">Back</a>
 
-  <a-scene webxr="optionalFeatures: hit-test" vr-mode-ui="enabled:false">
-    <a-entity camera look-controls position="0 1.6 0"></a-entity>
+  <a-scene
+    webxr="optionalFeatures: hit-test"
+    vr-mode-ui="enabled:false"
+    renderer="colorManagement: true; physicallyCorrectLights: true; exposure: 1.0;"
+  >
+    <!-- Assets -->
+    <a-assets>
+      <a-asset-item id="maanModel" src="assets/maan.glb"></a-asset-item>
+    </a-assets>
 
-    <a-text 
+    <!-- Camera -->
+    <a-entity id="cam" camera look-controls position="0 1.6 0"></a-entity>
+
+    <!-- Lights (belangrijk voor AR, anders is je model vaak zwart) -->
+    <a-light type="ambient" intensity="0.9"></a-light>
+    <a-light type="directional" intensity="1.2" position="10 15 5" rotation="-35 45 0"></a-light>
+
+    <!-- Tekst (dichtbij) -->
+    <a-text
       value="Beware the full moon at Nevermore..."
       position="0 1 -2"
       color="purple"
-      align="center">
+      align="center"
+      width="4">
     </a-text>
-  </a-scene>
 
+    <!-- Maan: draait langzaam + beweegt door de hele omgeving -->
+    <a-entity
+      id="moon"
+      gltf-model="#maanModel"
+      scale="0.01 0.01 0.01"
+      orbit-around-camera="radius: 40; height: 14; speed: 0.05; ellipse: 1.6"
+      animation="property: rotation; to: 0 360 0; loop: true; dur: 120000; easing: linear;"
+    ></a-entity>
+
+    <!-- Extra licht dat met de maan mee beweegt (als child) -->
+    <a-entity orbit-around-camera="radius: 40; height: 14; speed: 0.05; ellipse: 1.6">
+      <a-light type="point" intensity="0.9" distance="180" position="0 0 0"></a-light>
+    </a-entity>
+
+  </a-scene>
 </body>
 </html>
