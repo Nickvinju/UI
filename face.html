@@ -8,35 +8,27 @@
   <style>
     html, body {
       margin: 0;
-      padding: 0;
       width: 100%;
       height: 100%;
       overflow: hidden;
       background: transparent;
     }
 
-    /* Let CSS control sizing; don't fight A-Frame renderer sizing */
+    /* Keep it simple (this matches the official example structure) */
     .example-container {
-      position: fixed;
-      inset: 0;
-      width: 100vw;
-      height: 100dvh;            /* modern mobile */
-      height: var(--app-height); /* fallback */
       overflow: hidden;
-    }
-
-    a-scene {
       position: absolute;
-      inset: 0;
       width: 100%;
       height: 100%;
+      left: 0;
+      top: 0;
     }
 
     .options-panel {
       position: fixed;
       left: 0;
       top: 0;
-      z-index: 3;
+      z-index: 2;
       padding: 6px;
     }
 
@@ -53,55 +45,20 @@
     .options-panel img.selected {
       border-color: green;
     }
-
-    /* Start overlay */
-    .start-overlay {
-      position: fixed;
-      inset: 0;
-      z-index: 10;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      background: rgba(0,0,0,0.35);
-      backdrop-filter: blur(2px);
-    }
-
-    .start-btn {
-      font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif;
-      font-size: 18px;
-      padding: 14px 18px;
-      border-radius: 12px;
-      border: 0;
-      cursor: pointer;
-    }
-
-    .hint {
-      position: fixed;
-      left: 0;
-      right: 0;
-      bottom: 12px;
-      z-index: 11;
-      text-align: center;
-      color: white;
-      font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif;
-      font-size: 13px;
-      opacity: 0.9;
-      pointer-events: none;
-    }
   </style>
 
   <script>
-    document.addEventListener("DOMContentLoaded", function () {
+    document.addEventListener("DOMContentLoaded", function() {
       const list = ["glasses1", "glasses2", "hat1", "hat2", "earring"];
       const visibles = [true, false, false, true, true];
 
       const setVisible = (button, entities, visible) => {
         if (!button) return;
-        button.classList.toggle("selected", visible);
+        if (visible) button.classList.add("selected");
+        else button.classList.remove("selected");
         entities.forEach((entity) => entity.setAttribute("visible", visible));
       };
 
-      // UI toggles
       list.forEach((item, index) => {
         const button = document.querySelector("#" + item);
         const entities = document.querySelectorAll("." + item + "-entity");
@@ -114,118 +71,12 @@
           });
         }
       });
-
-      const sceneEl = document.querySelector("a-scene");
-      const overlayEl = document.querySelector(".start-overlay");
-      const startBtn = document.querySelector("#startAR");
-
-      let arSystem = null;
-      let arStarted = false;
-      let resizeTimer = null;
-
-      function setAppHeightVar() {
-        const vv = window.visualViewport;
-        const h = vv ? vv.height : window.innerHeight;
-        document.documentElement.style.setProperty("--app-height", `${h}px`);
-      }
-
-      function doAFrameResize() {
-        // A-Frame has its own resize pipeline; use it.
-        // This keeps camera projection + canvas in sync.
-        if (sceneEl && typeof sceneEl.resize === "function") {
-          sceneEl.resize();
-        }
-      }
-
-      function hardRecalibrate() {
-        // Used when the address bar / orientation changes.
-        // Stop/start forces MindAR to re-read sizes and rebuild projection.
-        if (!arSystem || !arStarted) return;
-
-        try { arSystem.stop(); } catch (e) {}
-        setAppHeightVar();
-        // Let layout settle, then resize + start
-        setTimeout(() => {
-          doAFrameResize();
-          try { arSystem.start(); } catch (e) {}
-        }, 200);
-      }
-
-      function scheduleRecalibrate() {
-        clearTimeout(resizeTimer);
-        resizeTimer = setTimeout(hardRecalibrate, 250);
-      }
-
-      sceneEl.addEventListener("loaded", () => {
-        arSystem = sceneEl.systems["mindar-face-system"];
-        setAppHeightVar();
-        doAFrameResize();
-      });
-
-      function startARFromGesture() {
-        if (!arSystem || arStarted) return;
-
-        setAppHeightVar();
-        doAFrameResize();
-
-        try {
-          arSystem.start();
-          arStarted = true;
-          overlayEl.style.display = "none";
-        } catch (e) {
-          console.warn("MindAR start failed:", e);
-        }
-      }
-
-      // Start (gesture)
-      startBtn.addEventListener("click", startARFromGesture);
-      startBtn.addEventListener("touchend", (e) => {
-        e.preventDefault();
-        startARFromGesture();
-      }, { passive: false });
-
-      // Handle mobile viewport changes (address bar / rotation)
-      window.addEventListener("resize", () => {
-        setAppHeightVar();
-        doAFrameResize();
-        scheduleRecalibrate();
-      });
-
-      window.addEventListener("orientationchange", () => {
-        setAppHeightVar();
-        doAFrameResize();
-        scheduleRecalibrate();
-      });
-
-      if (window.visualViewport) {
-        window.visualViewport.addEventListener("resize", () => {
-          setAppHeightVar();
-          doAFrameResize();
-          scheduleRecalibrate();
-        });
-
-        window.visualViewport.addEventListener("scroll", () => {
-          // Address bar show/hide can shift the effective viewport
-          setAppHeightVar();
-          doAFrameResize();
-          scheduleRecalibrate();
-        });
-      }
-
-      // Initial
-      setAppHeightVar();
-      doAFrameResize();
     });
   </script>
 </head>
 
 <body>
   <div class="example-container">
-
-    <div class="start-overlay">
-      <button class="start-btn" id="startAR">Start AR</button>
-      <div class="hint">Tap to allow camera access</div>
-    </div>
 
     <div class="options-panel">
       <img id="hat1" src="https://cdn.jsdelivr.net/gh/hiukim/mind-ar-js@1.2.5/examples/face-tracking/assets/hat/thumbnail.png"/>
@@ -236,7 +87,7 @@
     </div>
 
     <a-scene
-      mindar-face="autoStart: false"
+      mindar-face
       embedded
       background="transparent: true"
       color-space="sRGB"
