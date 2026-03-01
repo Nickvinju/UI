@@ -12,45 +12,24 @@
       width: 100%;
       height: 100%;
       overflow: hidden;
-      background: transparent; /* <-- belangrijk: geen zwart erachter */
+      background: transparent;
     }
 
-    /* Desktop/default */
-    .example-container {
+    .example-container, a-scene {
       overflow: hidden;
-      position: absolute;
-      width: 100%;
-      height: 100%;
-    }
-
-    a-scene {
-      position: absolute;
-      width: 100%;
-      height: 100%;
-    }
-
-    /* Mobiel fullscreen fix */
-    @media (max-width: 768px) {
-      .example-container {
-        position: fixed;
-        inset: 0;
-        width: 100vw;
-        height: 100vh;
-      }
-
-      a-scene {
-        position: fixed !important;
-        inset: 0 !important;
-        width: 100vw !important;
-        height: 100vh !important;
-      }
+      position: fixed;
+      inset: 0;
+      width: 100vw;
+      height: 100dvh;            /* modern */
+      height: var(--app-height); /* fallback */
     }
 
     .options-panel {
       position: fixed;
       left: 0;
       top: 0;
-      z-index: 2;
+      z-index: 3;
+      padding: 6px;
     }
 
     .options-panel img {
@@ -60,22 +39,57 @@
       object-fit: cover;
       cursor: pointer;
       background: rgba(0,0,0,0.2);
+      margin: 2px;
     }
 
     .options-panel img.selected {
       border-color: green;
     }
+
+    /* Start overlay */
+    .start-overlay {
+      position: fixed;
+      inset: 0;
+      z-index: 10;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background: rgba(0,0,0,0.35);
+      backdrop-filter: blur(2px);
+    }
+
+    .start-btn {
+      font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif;
+      font-size: 18px;
+      padding: 14px 18px;
+      border-radius: 12px;
+      border: 0;
+      cursor: pointer;
+    }
+
+    .hint {
+      position: fixed;
+      left: 0;
+      right: 0;
+      bottom: 12px;
+      z-index: 11;
+      text-align: center;
+      color: white;
+      font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif;
+      font-size: 13px;
+      opacity: 0.9;
+      pointer-events: none;
+    }
   </style>
 
   <script>
-    document.addEventListener("DOMContentLoaded", function() {
-
+    document.addEventListener("DOMContentLoaded", function () {
       const list = ["glasses1", "glasses2", "hat1", "hat2", "earring"];
       const visibles = [true, false, false, true, true];
 
       const setVisible = (button, entities, visible) => {
-        if (visible) button.classList.add("selected");
-        else button.classList.remove("selected");
+        if (!button) return;
+        button.classList.toggle("selected", visible);
         entities.forEach((entity) => entity.setAttribute("visible", visible));
       };
 
@@ -84,33 +98,118 @@
         const entities = document.querySelectorAll("." + item + "-entity");
         setVisible(button, entities, visibles[index]);
 
-        button.addEventListener("click", () => {
-          visibles[index] = !visibles[index];
-          setVisible(button, entities, visibles[index]);
-        });
+        if (button) {
+          button.addEventListener("click", () => {
+            visibles[index] = !visibles[index];
+            setVisible(button, entities, visibles[index]);
+          });
+        }
       });
 
-      // Alleen op mobiel: force resize (desktop/WebXR met rust laten)
       const isMobile = AFRAME.utils.device.isMobile();
-      if (isMobile) {
-        const sceneEl = document.querySelector("a-scene");
-        const doResize = () => {
-          setTimeout(() => {
-            if (sceneEl && sceneEl.renderer) {
-              sceneEl.renderer.setSize(window.innerWidth, window.innerHeight);
-            }
-          }, 200);
-        };
-        window.addEventListener("resize", doResize);
-        window.addEventListener("orientationchange", doResize);
-        doResize();
+      const sceneEl = document.querySelector("a-scene");
+      const containerEl = document.querySelector(".example-container");
+      const overlayEl = document.querySelector(".start-overlay");
+      const startBtn = document.querySelector("#startAR");
+
+      let arSystem = null;
+      let arStarted = false;
+
+      function applyViewportSize() {
+        const vv = window.visualViewport;
+        const w = vv ? vv.width : window.innerWidth;
+        const h = vv ? vv.height : window.innerHeight;
+
+        document.documentElement.style.setProperty("--app-height", `${h}px`);
+
+        if (containerEl) {
+          containerEl.style.width = `${w}px`;
+          containerEl.style.height = `${h}px`;
+        }
+        if (sceneEl) {
+          sceneEl.style.width = `${w}px`;
+          sceneEl.style.height = `${h}px`;
+        }
+
+        if (sceneEl && sceneEl.renderer && containerEl) {
+          const cw = containerEl.clientWidth;
+          const ch = containerEl.clientHeight;
+          sceneEl.renderer.setPixelRatio(window.devicePixelRatio || 1);
+          sceneEl.renderer.setSize(cw, ch, false);
+        }
       }
+
+      function safeStartAR() {
+        if (!arSystem || arStarted) return;
+        applyViewportSize();
+
+        // Start must happen from user gesture on many mobiles.
+        try {
+          arSystem.start();
+          arStarted = true;
+          if (overlayEl) overlayEl.style.display = "none";
+        } catch (e) {
+          console.warn("MindAR start failed:", e);
+          // Keep overlay visible so user can try again
+        }
+      }
+
+      function restartAR() {
+        if (!arSystem || !arStarted) return; // only restart after it actually started
+        try { arSystem.stop(); } catch (e) {}
+        applyViewportSize();
+        setTimeout(() => {
+          try { arSystem.start(); } catch (e) {}
+        }, 150);
+      }
+
+      // Once A-Frame is ready, grab MindAR system
+      sceneEl.addEventListener("loaded", () => {
+        arSystem = sceneEl.systems["mindar-face-system"];
+        applyViewportSize();
+      });
+
+      // Button starts AR (user gesture)
+      startBtn.addEventListener("click", safeStartAR);
+      startBtn.addEventListener("touchend", (e) => {
+        e.preventDefault();
+        safeStartAR();
+      }, { passive: false });
+
+      // Resize handling (only restart after started)
+      if (isMobile) {
+        let t;
+        const onResize = () => {
+          clearTimeout(t);
+          t = setTimeout(restartAR, 200);
+        };
+
+        window.addEventListener("resize", onResize);
+        window.addEventListener("orientationchange", onResize);
+
+        if (window.visualViewport) {
+          window.visualViewport.addEventListener("resize", onResize);
+          window.visualViewport.addEventListener("scroll", onResize);
+        }
+      } else {
+        // desktop: still keep canvas aligned
+        window.addEventListener("resize", applyViewportSize);
+      }
+
+      // initial sizing
+      applyViewportSize();
     });
   </script>
 </head>
 
 <body>
   <div class="example-container">
+
+    <!-- Start overlay (required for many mobile browsers) -->
+    <div class="start-overlay">
+      <button class="start-btn" id="startAR">Start AR</button>
+      <div class="hint">Tap to allow camera access</div>
+    </div>
 
     <div class="options-panel">
       <img id="hat1" src="https://cdn.jsdelivr.net/gh/hiukim/mind-ar-js@1.2.5/examples/face-tracking/assets/hat/thumbnail.png"/>
@@ -121,7 +220,7 @@
     </div>
 
     <a-scene
-      mindar-face
+      mindar-face="autoStart: false"
       embedded
       background="transparent: true"
       color-space="sRGB"
@@ -138,7 +237,7 @@
         <a-asset-item id="earringModel" src="https://cdn.jsdelivr.net/gh/hiukim/mind-ar-js@1.2.5/examples/face-tracking/assets/earring/scene.gltf"></a-asset-item>
       </a-assets>
 
-      <!-- Camera (MindAR beheert camerafeed; deze staat inactive) -->
+      <!-- MindAR manages camera feed; keep A-Frame camera inactive -->
       <a-camera active="false" position="0 0 0"></a-camera>
 
       <!-- Head occluder -->
