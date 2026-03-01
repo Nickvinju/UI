@@ -1,88 +1,104 @@
 <!doctype html>
 <html>
 <head>
-  <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>Nevermore AR</title>
+  <meta name="viewport" content="width=device-width,initial-scale=1, viewport-fit=cover" />
+  <title>Nevermore AR - camera background</title>
+
   <script src="https://aframe.io/releases/1.4.2/aframe.min.js"></script>
 
   <style>
-    body { margin: 0; }
-    #back {
+    html, body {
+      margin: 0;
+      height: 100%;
+      background: transparent;
+    }
+
+    /* Fullscreen camera video (achter de scene) */
+    #cameraVideo {
       position: fixed;
-      top: 15px;
-      left: 15px;
-      z-index: 10;
+      inset: 0;
+      width: 100vw;
+      height: 100vh;
+      object-fit: cover;
+      z-index: 0;
+      background: black;
+      transform: scaleX(-1); /* spiegel video als je front camera gebruikt; safe to keep */
+    }
+
+    /* A-Frame canvas boven de video */
+    a-scene {
+      position: fixed !important;
+      inset: 0 !important;
+      width: 100vw !important;
+      height: 100vh !important;
+      z-index: 1;
+      pointer-events: auto;
+    }
+
+    /* UI bovenop alles */
+    #ui {
+      position: fixed;
+      z-index: 2;
+      left: 12px;
+      top: 12px;
+      display: flex;
+      gap: 8px;
+      align-items: center;
+    }
+    #startBtn {
       padding: 8px 12px;
-      background: rgba(0,0,0,.6);
+      background: rgba(0,0,0,0.6);
       color: white;
       border-radius: 8px;
-      text-decoration: none;
+      border: none;
       font-size: 14px;
+    }
+    #status {
+      color: white;
       font-family: sans-serif;
+      text-shadow: 0 1px 3px rgba(0,0,0,0.8);
+      font-size: 13px;
     }
   </style>
-
-  <script>
-    // Component: laat een entity rond de camera bewegen (grote cirkel/ellips)
-    AFRAME.registerComponent('orbit-around-camera', {
-      schema: {
-        radius: { type: 'number', default: 35 },   // hoe ver weg (meters)
-        height: { type: 'number', default: 12 },   // hoogte (meters)
-        speed:  { type: 'number', default: 0.04 }, // snelheid (radians per seconde-ish)
-        ellipse:{ type: 'number', default: 1.4 }   // 1 = cirkel, >1 = ellips (meer “zoekwerk”)
-      },
-      init: function () {
-        this.cam = document.querySelector('#cam');
-        this.angle = Math.random() * Math.PI * 2; // start op random plek
-      },
-      tick: function (time, dt) {
-        if (!this.cam) return;
-
-        const d = this.data;
-        const delta = dt / 1000;
-
-        // Update hoek
-        this.angle += d.speed * delta;
-
-        // Camera positie
-        const camPos = this.cam.object3D.position;
-
-        // Ellips: x en z verschillende radius
-        const x = camPos.x + Math.cos(this.angle) * d.radius * d.ellipse;
-        const z = camPos.z + Math.sin(this.angle) * d.radius;
-        const y = d.height;
-
-        this.el.object3D.position.set(x, y, z);
-
-        // Laat de maan altijd richting camera draaien (zodat je 'm als je 'm vindt, goed ziet)
-        this.el.object3D.lookAt(camPos);
-      }
-    });
-  </script>
 </head>
-
 <body>
-  <a href="index.html" id="back">Back</a>
 
+  <!-- Video background (fallback voor mobiele camera) -->
+  <video id="cameraVideo" autoplay playsinline muted></video>
+
+  <!-- UI -->
+  <div id="ui">
+    <button id="startBtn">Start camera</button>
+    <div id="status">Tap start to enable camera</div>
+  </div>
+
+  <!-- A-Frame scene (transparent background) -->
   <a-scene
     webxr="optionalFeatures: hit-test"
     vr-mode-ui="enabled:false"
-    renderer="colorManagement: true; physicallyCorrectLights: true; exposure: 1.0;"
+    background="transparent: true"
+    renderer="colorManagement: true; physicallyCorrectLights: true; alpha: true; exposure: 1.0;"
   >
-    <!-- Assets -->
     <a-assets>
-      <a-asset-item id="maanModel" src="assets/maan.glb"></a-asset-item>
+      <!-- assets: pas paden/filenames aan indien nodig -->
+      <a-asset-item id="maanModel" src="./assets/maan.glb"></a-asset-item>
+      <audio id="wolfSound" src="./assets/wolfsound.mp3" preload="auto"></audio>
     </a-assets>
 
-    <!-- Camera -->
-    <a-entity id="cam" camera look-controls position="0 1.6 0"></a-entity>
+    <!-- Camera entity (met invisible cursor/raycaster voor clicks) -->
+    <a-entity id="cam" camera look-controls position="0 1.6 0"
+      cursor="rayOrigin: mouse; fuse: false"
+      raycaster="objects: .clickable; recursive: true">
+      <a-entity geometry="primitive: ring; radiusInner: 0.01; radiusOuter: 0.015"
+                material="opacity: 0; transparent: true" position="0 0 -1"></a-entity>
+    </a-entity>
 
-    <!-- Lights (belangrijk voor AR, anders is je model vaak zwart) -->
+    <!-- Scene lights -->
     <a-light type="ambient" intensity="0.9"></a-light>
-    <a-light type="directional" intensity="1.2" position="10 15 5" rotation="-35 45 0"></a-light>
+    <a-light type="directional" intensity="1.0" position="10 15 5"></a-light>
 
-    <!-- Tekst (dichtbij) -->
-    <a-text
+    <!-- Tekst (zichtbaar op start) -->
+    <a-text id="hintText"
       value="Beware the full moon at Nevermore..."
       position="0 1 -2"
       color="purple"
@@ -90,20 +106,139 @@
       width="4">
     </a-text>
 
-    <!-- Maan: draait langzaam + beweegt door de hele omgeving -->
-    <a-entity
-      id="moon"
-      gltf-model="#maanModel"
-      scale="0.01 0.01 0.01"
-      orbit-around-camera="radius: 40; height: 14; speed: 0.05; ellipse: 1.6"
-      animation="property: rotation; to: 0 360 0; loop: true; dur: 120000; easing: linear;"
-    ></a-entity>
-
-    <!-- Extra licht dat met de maan mee beweegt (als child) -->
-    <a-entity orbit-around-camera="radius: 40; height: 14; speed: 0.05; ellipse: 1.6">
-      <a-light type="point" intensity="0.9" distance="180" position="0 0 0"></a-light>
+    <!-- Maan entity: orbit + slow rotation + click sound -->
+    <a-entity id="moonRoot">
+      <a-entity id="moon"
+        class="clickable"
+        gltf-model="#maanModel"
+        scale="0.01 0.01 0.01"
+        orbit-around-camera="radius: 30; height: 12; speed: 0.035; ellipse: 1.6"
+        animation="property: rotation; to: 0 360 0; loop: true; dur: 120000; easing: linear;"
+        sound="src:#wolfSound; volume:1; positional:true; refDistance: 8;"
+        play-sound-on-select>
+      </a-entity>
+      <!-- moving point light that follows moon -->
+      <a-entity id="moonLight" orbit-around-camera="radius: 30; height: 12; speed: 0.035; ellipse: 1.6">
+        <a-light type="point" intensity="1.0" distance="80"></a-light>
+      </a-entity>
     </a-entity>
 
   </a-scene>
+
+  <script>
+    // --- Orbit component (same as eerder) ---
+    AFRAME.registerComponent('orbit-around-camera', {
+      schema: {
+        radius: { type: 'number', default: 30 },
+        height: { type: 'number', default: 12 },
+        speed:  { type: 'number', default: 0.035 },
+        ellipse:{ type: 'number', default: 1.6 }
+      },
+      init: function () {
+        this.cam = document.querySelector('#cam');
+        this.angle = Math.random() * Math.PI * 2;
+      },
+      tick: function (time, dt) {
+        if (!this.cam) return;
+        const d = this.data;
+        const delta = dt / 1000;
+        this.angle += d.speed * delta;
+        const camPos = this.cam.object3D.position;
+        const x = camPos.x + Math.cos(this.angle) * d.radius * d.ellipse;
+        const z = camPos.z + Math.sin(this.angle) * d.radius;
+        const y = camPos.y + d.height;
+        this.el.object3D.position.set(x, y, z);
+        this.el.object3D.lookAt(camPos);
+      }
+    });
+
+    // --- Play sound on click/tap/select (same) ---
+    AFRAME.registerComponent('play-sound-on-select', {
+      init: function () {
+        const el = this.el;
+        const sceneEl = el.sceneEl;
+
+        // audio unlock on first gesture
+        const unlockAudio = async () => {
+          try {
+            const ctx = AFRAME.audioContext;
+            if (ctx && ctx.state === 'suspended') await ctx.resume();
+          } catch (e) {}
+          sceneEl.removeEventListener('click', unlockAudio);
+          sceneEl.removeEventListener('touchstart', unlockAudio);
+        };
+        sceneEl.addEventListener('click', unlockAudio, { once: true });
+        sceneEl.addEventListener('touchstart', unlockAudio, { once: true });
+
+        const play = () => {
+          const sound = el.components.sound;
+          if (!sound) return;
+          if (sound.isPlaying) sound.stopSound();
+          sound.playSound();
+        };
+        el.addEventListener('click', play);
+        el.addEventListener('triggerdown', play);
+      }
+    });
+
+    // --- Start camera fallback for mobile (getUserMedia) ---
+    (function () {
+      const startBtn = document.getElementById('startBtn');
+      const status = document.getElementById('status');
+      const video = document.getElementById('cameraVideo');
+
+      // detect if immersive-ar supported
+      async function supportsImmersiveAr() {
+        if (navigator.xr && navigator.xr.isSessionSupported) {
+          try {
+            return await navigator.xr.isSessionSupported('immersive-ar');
+          } catch (e) {
+            return false;
+          }
+        }
+        return false;
+      }
+
+      // Start camera via getUserMedia (rear camera)
+      async function startFallbackCamera() {
+        try {
+          const stream = await navigator.mediaDevices.getUserMedia({
+            video: { facingMode: { ideal: "environment" } }, audio: false
+          });
+          video.srcObject = stream;
+          video.play().catch(()=>{});
+          status.textContent = "Camera running (fallback)";
+          startBtn.style.display = 'none';
+          // unmirror for rear camera: don't flip
+          video.style.transform = 'none';
+        } catch (err) {
+          console.error('getUserMedia failed', err);
+          status.textContent = 'Camera failed: ' + (err && err.message ? err.message : err);
+        }
+      }
+
+      // If device supports immersive-ar, keep start button to let user start AR later;
+      // always still provide fallback getUserMedia for non-XR browsers.
+      startBtn.addEventListener('click', async () => {
+        startBtn.disabled = true;
+        status.textContent = 'Starting camera...';
+        const immersive = await supportsImmersiveAr();
+
+        // If immersive-ar is supported, we still start fallback so mobile shows environment
+        // quickly; immersive session will be started later by WebXR when requested.
+        await startFallbackCamera();
+      });
+
+      // On desktop we might auto-hide video (desktop usually uses proper WebXR / or no camera)
+      // but we keep fallback available; user must click start to allow camera.
+      // Optionally hide start button on big screens:
+      if (!AFRAME.utils.device.isMobile()) {
+        // On desktop, prefer to hide the button but allow manual start if needed
+        // keep visible for debugging:
+        // startBtn.style.display = 'inline-block';
+      }
+    })();
+  </script>
+
 </body>
 </html>

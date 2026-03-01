@@ -1,0 +1,18 @@
+<html>  
+    <head>
+        <script src="https://aframe.io/releases/1.7.1/aframe.min.js"></script>
+   <script src="https://unpkg.com/aframe-environment-component@1.5.x/dist/aframe-environment-component.min.js"></script>
+
+    </head>
+<body>
+<a-scene>
+    <a-assets>
+  <img id="stoneTex" src="./assets/stone.jpeg">
+</a-assets>
+  <a-box src="#stoneTex" position="0 2 -5" rotation="0 45 45" scale="2 2 2" animation="property: object3D.position.y; to: 2.2; dir: alternate; dur: 2000; loop: true"></a-box>
+<a-entity environment="preset: forest; dressingAmount: 500"></a-entity>
+
+</a-scene>
+
+</body>
+</html>
