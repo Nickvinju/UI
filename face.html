@@ -15,13 +15,21 @@
       background: transparent;
     }
 
-    .example-container, a-scene {
-      overflow: hidden;
+    /* Let CSS control sizing; don't fight A-Frame renderer sizing */
+    .example-container {
       position: fixed;
       inset: 0;
       width: 100vw;
-      height: 100dvh;            /* modern */
+      height: 100dvh;            /* modern mobile */
       height: var(--app-height); /* fallback */
+      overflow: hidden;
+    }
+
+    a-scene {
+      position: absolute;
+      inset: 0;
+      width: 100%;
+      height: 100%;
     }
 
     .options-panel {
@@ -93,6 +101,7 @@
         entities.forEach((entity) => entity.setAttribute("visible", visible));
       };
 
+      // UI toggles
       list.forEach((item, index) => {
         const button = document.querySelector("#" + item);
         const entities = document.querySelectorAll("." + item + "-entity");
@@ -106,98 +115,106 @@
         }
       });
 
-      const isMobile = AFRAME.utils.device.isMobile();
       const sceneEl = document.querySelector("a-scene");
-      const containerEl = document.querySelector(".example-container");
       const overlayEl = document.querySelector(".start-overlay");
       const startBtn = document.querySelector("#startAR");
 
       let arSystem = null;
       let arStarted = false;
+      let resizeTimer = null;
 
-      function applyViewportSize() {
+      function setAppHeightVar() {
         const vv = window.visualViewport;
-        const w = vv ? vv.width : window.innerWidth;
         const h = vv ? vv.height : window.innerHeight;
-
         document.documentElement.style.setProperty("--app-height", `${h}px`);
+      }
 
-        if (containerEl) {
-          containerEl.style.width = `${w}px`;
-          containerEl.style.height = `${h}px`;
-        }
-        if (sceneEl) {
-          sceneEl.style.width = `${w}px`;
-          sceneEl.style.height = `${h}px`;
-        }
-
-        if (sceneEl && sceneEl.renderer && containerEl) {
-          const cw = containerEl.clientWidth;
-          const ch = containerEl.clientHeight;
-          sceneEl.renderer.setPixelRatio(window.devicePixelRatio || 1);
-          sceneEl.renderer.setSize(cw, ch, false);
+      function doAFrameResize() {
+        // A-Frame has its own resize pipeline; use it.
+        // This keeps camera projection + canvas in sync.
+        if (sceneEl && typeof sceneEl.resize === "function") {
+          sceneEl.resize();
         }
       }
 
-      function safeStartAR() {
-        if (!arSystem || arStarted) return;
-        applyViewportSize();
+      function hardRecalibrate() {
+        // Used when the address bar / orientation changes.
+        // Stop/start forces MindAR to re-read sizes and rebuild projection.
+        if (!arSystem || !arStarted) return;
 
-        // Start must happen from user gesture on many mobiles.
+        try { arSystem.stop(); } catch (e) {}
+        setAppHeightVar();
+        // Let layout settle, then resize + start
+        setTimeout(() => {
+          doAFrameResize();
+          try { arSystem.start(); } catch (e) {}
+        }, 200);
+      }
+
+      function scheduleRecalibrate() {
+        clearTimeout(resizeTimer);
+        resizeTimer = setTimeout(hardRecalibrate, 250);
+      }
+
+      sceneEl.addEventListener("loaded", () => {
+        arSystem = sceneEl.systems["mindar-face-system"];
+        setAppHeightVar();
+        doAFrameResize();
+      });
+
+      function startARFromGesture() {
+        if (!arSystem || arStarted) return;
+
+        setAppHeightVar();
+        doAFrameResize();
+
         try {
           arSystem.start();
           arStarted = true;
-          if (overlayEl) overlayEl.style.display = "none";
+          overlayEl.style.display = "none";
         } catch (e) {
           console.warn("MindAR start failed:", e);
-          // Keep overlay visible so user can try again
         }
       }
 
-      function restartAR() {
-        if (!arSystem || !arStarted) return; // only restart after it actually started
-        try { arSystem.stop(); } catch (e) {}
-        applyViewportSize();
-        setTimeout(() => {
-          try { arSystem.start(); } catch (e) {}
-        }, 150);
-      }
-
-      // Once A-Frame is ready, grab MindAR system
-      sceneEl.addEventListener("loaded", () => {
-        arSystem = sceneEl.systems["mindar-face-system"];
-        applyViewportSize();
-      });
-
-      // Button starts AR (user gesture)
-      startBtn.addEventListener("click", safeStartAR);
+      // Start (gesture)
+      startBtn.addEventListener("click", startARFromGesture);
       startBtn.addEventListener("touchend", (e) => {
         e.preventDefault();
-        safeStartAR();
+        startARFromGesture();
       }, { passive: false });
 
-      // Resize handling (only restart after started)
-      if (isMobile) {
-        let t;
-        const onResize = () => {
-          clearTimeout(t);
-          t = setTimeout(restartAR, 200);
-        };
+      // Handle mobile viewport changes (address bar / rotation)
+      window.addEventListener("resize", () => {
+        setAppHeightVar();
+        doAFrameResize();
+        scheduleRecalibrate();
+      });
 
-        window.addEventListener("resize", onResize);
-        window.addEventListener("orientationchange", onResize);
+      window.addEventListener("orientationchange", () => {
+        setAppHeightVar();
+        doAFrameResize();
+        scheduleRecalibrate();
+      });
 
-        if (window.visualViewport) {
-          window.visualViewport.addEventListener("resize", onResize);
-          window.visualViewport.addEventListener("scroll", onResize);
-        }
-      } else {
-        // desktop: still keep canvas aligned
-        window.addEventListener("resize", applyViewportSize);
+      if (window.visualViewport) {
+        window.visualViewport.addEventListener("resize", () => {
+          setAppHeightVar();
+          doAFrameResize();
+          scheduleRecalibrate();
+        });
+
+        window.visualViewport.addEventListener("scroll", () => {
+          // Address bar show/hide can shift the effective viewport
+          setAppHeightVar();
+          doAFrameResize();
+          scheduleRecalibrate();
+        });
       }
 
-      // initial sizing
-      applyViewportSize();
+      // Initial
+      setAppHeightVar();
+      doAFrameResize();
     });
   </script>
 </head>
@@ -205,7 +222,6 @@
 <body>
   <div class="example-container">
 
-    <!-- Start overlay (required for many mobile browsers) -->
     <div class="start-overlay">
       <button class="start-btn" id="startAR">Start AR</button>
       <div class="hint">Tap to allow camera access</div>
@@ -237,7 +253,6 @@
         <a-asset-item id="earringModel" src="https://cdn.jsdelivr.net/gh/hiukim/mind-ar-js@1.2.5/examples/face-tracking/assets/earring/scene.gltf"></a-asset-item>
       </a-assets>
 
-      <!-- MindAR manages camera feed; keep A-Frame camera inactive -->
       <a-camera active="false" position="0 0 0"></a-camera>
 
       <!-- Head occluder -->
@@ -318,7 +333,6 @@
           visible="false">
         </a-gltf-model>
       </a-entity>
-
     </a-scene>
   </div>
 </body>
