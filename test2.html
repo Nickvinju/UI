@@ -1,0 +1,84 @@
+<html>
+<head>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <script src="https://aframe.io/releases/1.7.1/aframe.min.js"></script>
+  <script src="https://unpkg.com/aframe-environment-component@1.5.x/dist/aframe-environment-component.min.js"></script>
+<script>
+  AFRAME.registerComponent("toggle-color", {
+    init: function () {
+      const el = this.el;
+      let on = false;
+
+      el.addEventListener("click", () => {
+        on = !on;
+        el.setAttribute("color", on ? "gold" : "red");
+      });
+    }
+  });
+</script>
+<script>
+  AFRAME.registerComponent("hover-highlight", {
+    init: function () {
+      const el = this.el;
+
+      el.addEventListener("mouseenter", () => {
+        el.setAttribute("color", "orange");
+        el.setAttribute("scale", "2.2 2.2 2.2");
+      });
+
+      el.addEventListener("mouseleave", () => {
+        // terug naar huidige kleur (na klik kan die gold zijn)
+        const current = el.getAttribute("color");
+        el.setAttribute("color", current);
+        el.setAttribute("scale", "2 2 2");
+      });
+    }
+  });
+</script>
+<script>
+  AFRAME.registerComponent("click-pop", {
+    init: function () {
+      const el = this.el;
+      el.addEventListener("click", () => {
+        el.removeAttribute("animation__pop");
+        el.setAttribute("animation__pop", {
+          property: "scale",
+          dir: "alternate",
+          dur: 120,
+          loop: 2,
+          to: "2.35 2.35 2.35"
+        });
+      });
+    }
+  });
+</script>
+<script>
+  AFRAME.registerComponent("touch-to-click", {
+    init: function () {
+      const el = this.el;
+      el.addEventListener("touchstart", (e) => {
+        e.preventDefault();
+        el.emit("click");
+      }, { passive: false });
+    }
+  });
+</script>
+</head>
+<body>
+<a-scene>
+  <a-entity environment="preset: forest; dressingAmount: 500"></a-entity>
+
+  <!-- Camera + cursor (click) -->
+  <a-entity position="0 1.6 0">
+    <a-camera>
+      <a-cursor raycaster="objects: .clickable" fuse="false"></a-cursor>
+    </a-camera>
+  </a-entity>
+
+  <!-- Maak object klikbaar met class -->
+<a-box class="clickable" toggle-color hover-highlight click-pop touch-to-click color="red"
+  position="0 2 -5" rotation="0 45 45" scale="2 2 2"></a-box>
+</a-scene>
+  </a-scene>
+</body>
+</html>
